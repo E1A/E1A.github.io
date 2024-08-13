@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SoundCloud Embedder</title>
+    <link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f9f9f9;
+            text-align: center;
+        }
+        input[type="text"] {
+            width: 80%;
+            max-width: 500px;
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #ff7700;
+            border: none;
+            color: white;
+            border-radius: 5px;
+            margin: 5px;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+        .embed-container {
+            margin-top: 20px;
+        }
+        .controls {
+            margin-top: 20px;
+        }
+        #playlist-container {
+            margin-top: 20px;
+            text-align: left;
+            display: none;
+        }
+        .playlist-item {
+            color: #000;
+            cursor: pointer;
+            margin: 5px 0;
+        }
+        .playlist-item:hover {
+            text-decoration: underline;
+        }
+        @media (max-width: 600px) {
+            button {
+                padding: 8px 16px;
+                font-size: 14px;
+            }
+            input[type="text"] {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>SoundCloud Embedder</h1>
+    <p>Enter a SoundCloud URL to embed the track or playlist:</p>
+
+    <form id="soundcloud-form">
+        <input type="text" id="soundcloud-url" placeholder="Enter SoundCloud URL">
+        <button type="submit">Embed</button>
+        <p id="error-message" class="error"></p>
+    </form>
+
+    <div id="embed-container" class="embed-container"></div>
+
+    <div id="controls-container" class="controls" style="display:none;">
+        <button id="play">Play</button>
+        <button id="pause">Pause</button>
+    </div>
+
+    <div id="playlist-container">
+        <h3>Playlist</h3>
+        <div id="playlist"></div>
+    </div>
+
+    <script src="https://w.soundcloud.com/player/api.js"></script>
+    <script>
+        let widget, playlist = [], currentTrackIndex = 0;
+
+        document.getElementById('soundcloud-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const urlInput = document.getElementById('soundcloud-url').value.trim();
+            const errorMessage = document.getElementById('error-message');
+            const embedContainer = document.getElementById('embed-container');
+            const controlsContainer = document.getElementById('controls-container');
+            const playlistContainer = document.getElementById('playlist-container');
+
+            // Clear any previous error messages
+            errorMessage.textContent = '';
+            embedContainer.innerHTML = '';
+            controlsContainer.style.display = 'none';
+            playlistContainer.style.display = 'none';
+
+            // Simplified Regex to validate SoundCloud URLs
+            const soundcloudUrlRegex = /^https:\/\/(soundcloud\.com|on\.soundcloud\.com|m\.soundcloud\.com)\/.+/;
+
+            if (soundcloudUrlRegex.test(urlInput)) {
+                if (urlInput.includes('/sets/')) {
+                    // If it's a playlist, fetch playlist details
+                    fetchPlaylistDetails(urlInput);
+                } else {
+                    // If it's a track, embed it directly
+                    const embedHtml = `<iframe id="soundcloud-widget" width="100%" height="166" scrolling="no" frameborder="no" allow="autoplay" src="https://w.soundcloud.com/player/?url=${encodeURIComponent(urlInput)}&color=%23ff7700&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true"></iframe>`;
+                    embedContainer.innerHTML = embedHtml;
+
+                    // Initialize SoundCloud Widget API
+                    widget = SC.Widget(document.getElementById('soundcloud-widget'));
+
+                    widget.bind(SC.Widget.Events.READY, function() {
+                        controlsContainer.style.display = 'block';
+                    });
+                }
+            } else {
+                errorMessage.textContent = 'Please enter a valid SoundCloud URL.';
+            }
+        });
+
+        document.getElementById('play').addEventListener('click', function() {
+            if (widget) widget.play();
+        });
+
+        document.getElementById('pause').addEventListener('click', function() {
+            if (widget) widget.pause();
+        });
+
+        function fetchPlaylistDetails(urlInput) {
+            const playlistId = urlInput.split('/sets/')[1].split('?')[0];
+            const apiUrl = `https://api.soundcloud.com/playlists/${playlistId}?client_id={{ secrets.SOUNDCLOUD_CLIENT_ID }}`;
+
+            fetch(apiUrl)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.tracks) {
+                        playlist = data.tracks;
+                        displayPlaylist();
+                        document.getElementById('playlist-container').style.display = 'block';
+
+                        // Auto-embed the first track
+                        playTrack(0);
+                    } else {
+                        document.getElementById('error-message').textContent = 'Could not load playlist.';
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('error-message').textContent = 'An error occurred while fetching the playlist.';
+                    console.error('Error fetching playlist:', error);
+                });
+        }
+
+        function displayPlaylist() {
+            const playlistElement = document.getElementById('playlist');
+            playlistElement.innerHTML = '';
+            playlist.forEach((track, index) => {
+                const trackElement = document.createElement('div');
+                trackElement.className = 'playlist-item';
+                trackElement.textContent = track.title;
+                trackElement.addEventListener('click', () => playTrack(index));
+                playlistElement.appendChild(trackElement);
+            });
+        }
+
+        function playTrack(index) {
+            currentTrackIndex = index;
+            const track = playlist[index];
+            widget.load(track.permalink_url, {
+                auto_play: true
+            });
+        }
+    </script>
+
+</body>
+</html>
